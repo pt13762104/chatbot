@@ -19,18 +19,11 @@ deviceCount = nvidia_smi.nvmlDeviceGetCount()
 chat_hist = {}
 
 
-def get_gpu():
-    for i in range(deviceCount):
-        handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
-        util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
-        mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-        return [mem.used, mem.total, util.gpu]
-
-
-def get_uptime():
-    with open("/proc/uptime", "r") as f:
-        uptime_seconds = float(f.readline().split()[0])
-    return uptime_seconds
+def get_gpu(i):
+    handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
+    util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
+    mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+    return [mem.used, mem.total, util.gpu]
 
 
 @bot.slash_command(description="Chat with a LLM")
@@ -95,39 +88,52 @@ async def system(ctx, system=discord.Option(str, "System prompt", default="")):
 
 @bot.slash_command(description="Show system stats")
 async def stats(ctx):
+    embed = discord.Embed(title="System Stats", color=0x007FFF)
     cpu_percent = psutil.cpu_percent()
     memory_percent = psutil.virtual_memory().percent
     memory_gb = psutil.virtual_memory().total / 1e9
     memory_gb_used = memory_gb - psutil.virtual_memory().available / 1e9
     starttime = int(psutil.boot_time())
-    gpu_stats = get_gpu()
     total, used, free = shutil.disk_usage("/")
-    gpu_percent = gpu_stats[2]
-    gpu_memory_used = gpu_stats[0] / 1e9
-    gpu_memory_total = gpu_stats[1] / 1e9
-    uptime = get_uptime()
     os = distro.name(pretty=True)
-    embed = discord.Embed(title="System Stats", color=0x007FFF)
     embed.add_field(name="CPU Usage:", value=f"{cpu_percent}%", inline=False)
     embed.add_field(
         name="Memory Usage:",
         value=f"{memory_percent}% ({memory_gb_used:.1f}/{memory_gb:.1f} GB)",
         inline=False,
     )
-    embed.add_field(name="GPU Usage:", value=f"{gpu_percent}%", inline=False)
+    if deviceCount:
+        if deviceCount == 1:
+            gpu_stats = get_gpu(0)
+            gpu_percent = gpu_stats[2]
+            gpu_memory_used = gpu_stats[0] / 1e9
+            gpu_memory_total = gpu_stats[1] / 1e9
+            embed.add_field(name="GPU Usage:", value=f"{gpu_percent}%", inline=False)
+            embed.add_field(
+                name="GPU Memory Usage:",
+                value=f"{gpu_memory_used*100/gpu_memory_total:.1f}% ({gpu_memory_used:.1f}/{gpu_memory_total:.1f} GB)",
+                inline=False,
+            )
+        else:
+            for i in range(deviceCount):
+                gpu_stats = get_gpu(i)
+                gpu_percent = gpu_stats[2]
+                gpu_memory_used = gpu_stats[0] / 1e9
+                gpu_memory_total = gpu_stats[1] / 1e9
+                embed.add_field(
+                    name=f"GPU {i+1} Usage:", value=f"{gpu_percent}%", inline=False
+                )
+                embed.add_field(
+                    name=f"GPU {i+1} Memory Usage:",
+                    value=f"{gpu_memory_used*100/gpu_memory_total:.1f}% ({gpu_memory_used:.1f}/{gpu_memory_total:.1f} GB)",
+                    inline=False,
+                )
     embed.add_field(
-        name="GPU Memory Usage:",
-        value=f"{gpu_memory_used*100/gpu_memory_total:.1f}% ({gpu_memory_used:.1f}/{gpu_memory_total:.1f} GB)",
-        inline=False,
-    )
-    embed.add_field(
-        name="Disk usage:",
+        name="Disk Usage:",
         value=f"{used*100/total:.1f}% ({used/1e9:.1f}/{total/1e9:.1f} GB)",
         inline=False,
     )
-    embed.add_field(
-        name="Uptime:", value=f"<t:{starttime}:R> ({uptime:.1f}s)", inline=False
-    )
+    embed.add_field(name="Uptime:", value=f"<t:{starttime}:R>", inline=False)
     embed.add_field(name="OS:", value=f"{os}", inline=False)
     embed.add_field(
         name="Kernel:",

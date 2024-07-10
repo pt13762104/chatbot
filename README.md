@@ -8,3 +8,5 @@ Requirements:
 This bot is only tested on Linux.
 
 To start the bot, create a file named `.env` that has the bot token (the file should look like `TOKEN=...`) and run `python thebot.py`.
+
+This bot currently only supports getting data from Nvidia GPUs.
