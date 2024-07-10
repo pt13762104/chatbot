@@ -39,7 +39,9 @@ def get_uptime():
     guild_ids=[1232207806724308992, 1234540901733240865],
 )
 async def chat(
-    ctx, message=discord.Option(str), model=discord.Option(str, default="llama3")
+    ctx,
+    message=discord.Option(str, description="Message to send"),
+    model=discord.Option(str, default="llama3", description="Model to use"),
 ):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
@@ -84,7 +86,9 @@ async def clear(ctx):
     description="Set system prompt",
     guild_ids=[1232207806724308992, 1234540901733240865],
 )
-async def system(ctx, system=discord.Option(str, default="", required=False)):
+async def system(
+    ctx, system=discord.Option(str, default="", description="System prompt")
+):
     embed = discord.Embed(title="System prompt set!", color=0x007FFF)
     if system == "":
         if ctx.author.id in chat_hist:
