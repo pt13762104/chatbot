@@ -1,2 +1,2 @@
-py-cord
 ollama-python
+py-cord
