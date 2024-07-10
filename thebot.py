@@ -35,11 +35,12 @@ def get_uptime():
 
 @bot.slash_command(
     name="chat",
-    description="Chat with Llama 3 8B",
+    description="Chat",
     guild_ids=[1232207806724308992, 1234540901733240865],
 )
-async def chat(ctx, message=discord.Option(str)):
-    print(ctx.author.id)
+async def chat(
+    ctx, message=discord.Option(str), model=discord.Option(str, default="llama3")
+):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
     chat_hist[ctx.author.id].append(
@@ -49,11 +50,18 @@ async def chat(ctx, message=discord.Option(str)):
         }
     )
     await ctx.response.defer()
-    response = ollama.chat(model="llama3", messages=chat_hist[ctx.author.id])
+    response = ollama.chat(model=model, messages=chat_hist[ctx.author.id])
     msg = response["message"]
     chat_hist[ctx.author.id].append(msg)
-    embed = discord.Embed(title="Response:", color=0x007FFF, description=msg["content"])
-    await ctx.followup.send(embed=embed)
+    tmp = msg["content"]
+    if len(tmp) <= 4000:
+        embed = discord.Embed(title="Response:", color=0x007FFF, description=tmp)
+        await ctx.followup.send(embed=embed)
+    else:
+        f = open("message.txt", "w")
+        f.write(tmp)
+        f.close()
+        await ctx.followup.send(file=discord.File("message.txt"))
 
 
 @bot.slash_command(
@@ -108,9 +116,7 @@ async def stats(ctx):
     starttime = int(psutil.boot_time())
     gpu_stats = get_gpu()
     total, used, free = shutil.disk_usage("/")
-    gpu_percent = gpu_stats[
-        2
-    ]  # You might need to install a GPU monitoring library for this part
+    gpu_percent = gpu_stats[2]
     gpu_memory_used = gpu_stats[0] / 1e9
     gpu_memory_total = gpu_stats[1] / 1e9
     uptime = get_uptime()
