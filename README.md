@@ -2,8 +2,8 @@ This is a simple chat and monitoring bot.
 
 Requirements:
 
-* `ollama-python` (and Ollama)
-* `py-cord`
+* [ollama-python](https://github.com/ollama/ollama-python) (and [Ollama](https://ollama.com))
+* [Pycord](https://pycord.dev/)
 
 This bot is only tested on Linux.
 
