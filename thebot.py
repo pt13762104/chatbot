@@ -33,15 +33,11 @@ def get_uptime():
     return uptime_seconds
 
 
-@bot.slash_command(
-    name="chat",
-    description="Chat",
-    guild_ids=[1232207806724308992, 1234540901733240865],
-)
+@bot.slash_command(description="Chat with a LLM")
 async def chat(
     ctx,
-    message=discord.Option(str, description="Message to send"),
-    model=discord.Option(str, default="llama3", description="Model to use"),
+    message=discord.Option(str, "Message to send"),
+    model=discord.Option(str, "Model to use", default="llama3"),
 ):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
@@ -66,11 +62,7 @@ async def chat(
         await ctx.followup.send(file=discord.File("message.txt"))
 
 
-@bot.slash_command(
-    name="clear",
-    description="Clear the chat history",
-    guild_ids=[1232207806724308992, 1234540901733240865],
-)
+@bot.slash_command(description="Clear the chat history")
 async def clear(ctx):
     embed = discord.Embed(title="Chat history cleared!", color=0x007FFF)
     if ctx.author.id in chat_hist:
@@ -81,14 +73,8 @@ async def clear(ctx):
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(
-    name="system",
-    description="Set system prompt",
-    guild_ids=[1232207806724308992, 1234540901733240865],
-)
-async def system(
-    ctx, system=discord.Option(str, default="", description="System prompt")
-):
+@bot.slash_command(description="Set system prompt")
+async def system(ctx, system=discord.Option(str, "System prompt", default="")):
     embed = discord.Embed(title="System prompt set!", color=0x007FFF)
     if system == "":
         if ctx.author.id in chat_hist:
@@ -107,11 +93,7 @@ async def system(
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(
-    name="stats",
-    description="Show system stats",
-    guild_ids=[1232207806724308992, 1234540901733240865],
-)
+@bot.slash_command(description="Show system stats")
 async def stats(ctx):
     cpu_percent = psutil.cpu_percent()
     memory_percent = psutil.virtual_memory().percent
