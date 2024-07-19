@@ -30,7 +30,7 @@ def get_gpu(i):
 async def chat(
     ctx,
     message=discord.Option(str, "Message to send"),
-    model=discord.Option(str, "Model to use", default="llama3"),
+    model=discord.Option(str, "Model to use", default=os.environ["DEFAULT_MODEL"]),
 ):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
