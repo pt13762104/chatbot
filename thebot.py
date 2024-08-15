@@ -91,7 +91,10 @@ async def clear(ctx):
     embed = discord.Embed(title="Chat history cleared!", color=0x007FFF)
     if ctx.author.id in chat_hist:
         r = []
-        if chat_hist[ctx.author.id][0]["role"] == "system":
+        if (
+            len(chat_hist[ctx.author.id]) > 0
+            and chat_hist[ctx.author.id][0]["role"] == "system"
+        ):
             r = [chat_hist[ctx.author.id][0]]
         chat_hist.update({ctx.author.id: r})
     if ctx.author.id in chat_hist:
@@ -196,5 +199,8 @@ from os.path import isfile, join
 for f in listdir("history"):
     if isfile(join("history", f)):
         ff = open(join("history", f), "r")
-        chat_hist[int(f.replace(".json", ""))] = json.load(ff)
+        try:
+            chat_hist[int(f.replace(".json", ""))] = json.load(ff)
+        except json.decoder.JSONDecodeError:
+            pass
 bot.run(os.getenv("TOKEN"))
