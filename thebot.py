@@ -9,6 +9,7 @@ import platform
 import nvidia_smi
 import ollama
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -45,6 +46,8 @@ async def chat(
     msg = response["message"]
     chat_hist[ctx.author.id].append(msg)
     tmp = msg["content"]
+    ff = open(f"history/{ctx.author.id}.json", "w")
+    ff.write(json.dumps(chat_hist[ctx.author.id]))
     if len(tmp) <= 4000:
         embed = discord.Embed(title="Response:", color=0x007FFF, description=tmp)
         embed.add_field(
@@ -91,6 +94,9 @@ async def clear(ctx):
         if chat_hist[ctx.author.id][0]["role"] == "system":
             r = [chat_hist[ctx.author.id][0]]
         chat_hist.update({ctx.author.id: r})
+    if ctx.author.id in chat_hist:
+        ff = open(f"history/{ctx.author.id}.json", "w")
+        ff.write(json.dumps(chat_hist[ctx.author.id]))
     await ctx.respond(embed=embed)
 
 
@@ -111,7 +117,9 @@ async def system(ctx, system=discord.Option(str, "System prompt", default="")):
                 )
         else:
             chat_hist.update({ctx.author.id: [{"role": "system", "content": system}]})
-
+    if ctx.author.id in chat_hist:
+        ff = open(f"history/{ctx.author.id}.json", "w")
+        ff.write(json.dumps(chat_hist[ctx.author.id]))
     await ctx.respond(embed=embed)
 
 
@@ -182,4 +190,11 @@ async def stats(ctx):
     await ctx.respond(embed=embed)
 
 
+from os import listdir
+from os.path import isfile, join
+
+for f in listdir("history"):
+    if isfile(join("history", f)):
+        ff = open(join("history", f), "r")
+        chat_hist[int(f.replace(".json", ""))] = json.load(ff)
 bot.run(os.getenv("TOKEN"))
