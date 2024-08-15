@@ -1,2 +1,7 @@
-ollama-python
 py-cord
+ollama
+psutil
+distro
+py-cpuinfo
+nvidia-ml-py3
+python-dotenv
