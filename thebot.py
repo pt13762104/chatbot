@@ -47,6 +47,34 @@ async def chat(
     tmp = msg["content"]
     if len(tmp) <= 4000:
         embed = discord.Embed(title="Response:", color=0x007FFF, description=tmp)
+        embed.add_field(
+            name="Prompt token count:",
+            value=(
+                f"{response['prompt_eval_count']} token" + "s"
+                if response["prompt_eval_count"] > 1
+                else ""
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Prompt processing speed:",
+            value=f"{response['prompt_eval_count']/response['prompt_eval_duration']*1e9:.1f} t/s",
+            inline=False,
+        )
+        embed.add_field(
+            name="Generated token count:",
+            value=(
+                f"{response['eval_count']} token" + "s"
+                if response["eval_count"] > 1
+                else ""
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Generation speed:",
+            value=f"{response['eval_count']/response['eval_duration']*1e9:.1f} t/s",
+            inline=False,
+        )
         await ctx.followup.send(embed=embed)
     else:
         f = open("message.txt", "w")
@@ -83,6 +111,7 @@ async def system(ctx, system=discord.Option(str, "System prompt", default="")):
                 )
         else:
             chat_hist.update({ctx.author.id: [{"role": "system", "content": system}]})
+
     await ctx.respond(embed=embed)
 
 
