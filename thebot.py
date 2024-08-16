@@ -126,6 +126,23 @@ async def system(ctx, system=discord.Option(str, "System prompt", default="")):
     await ctx.respond(embed=embed)
 
 
+@bot.slash_command(description="Show Ollama models")
+async def ps(ctx):
+    embed = discord.Embed(title="Ollama ps", color=0x007FFF)
+    models = ollama.ps()["models"]
+    for i in range(len(models)):
+        embed.add_field(name=f"Model {i+1} name: ", value=models[i]["name"])
+        embed.add_field(
+            name=f"Model {i+1} size: ", value=f"{models[i]['size']/1e9:.1f} GB"
+        )
+        embed.add_field(
+            name=f"Model {i+1} processors: ",
+            value=f"{models[i]['size_vram']/models[i]['size']*100:.1f}% GPU ({models[i]['size_vram']/1e9:.1f} GB), {(models[i]['size']-models[i]['size_vram'])/models[i]['size']*100:.1f}% CPU ({(models[i]['size']-models[i]['size_vram'])/1e9:.1f} GB)",
+            inline=False,
+        )
+    await ctx.respond(embed=embed)
+
+
 @bot.slash_command(description="Show system stats")
 async def stats(ctx):
     embed = discord.Embed(title="System Stats", color=0x007FFF)
@@ -203,4 +220,5 @@ for f in listdir("history"):
             chat_hist[int(f.replace(".json", ""))] = json.load(ff)
         except json.decoder.JSONDecodeError:
             pass
+print(ollama.ps())
 bot.run(os.getenv("TOKEN"))
