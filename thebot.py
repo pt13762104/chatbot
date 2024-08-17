@@ -279,25 +279,26 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
     return wrapper
 
 
-loaded_name = "dev"
-with torch.inference_mode():
-    dualcliploader = DualCLIPLoader()
-    clip_model = dualcliploader.load_clip(
-        clip_name1="t5xxl_fp8_e4m3fn.safetensors",
-        clip_name2="clip_l.safetensors",
-        type="flux",
-    )
-    unetloader = UNETLoader()
-    loaded_model = unetloader.load_unet(
-        unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
-    )
-    vaeloader = VAELoader()
-    ae = vaeloader.load_vae(vae_name="ae.sft")
-    emptylatentimage = EmptyLatentImage()
-    cliptextencode = CLIPTextEncode()
-    ksampler = KSampler()
-    vaedecode = VAEDecode()
-    saveimage = SaveImage()
+if int(os.environ["IMAGE_GEN"]):
+    loaded_name = "dev"
+    with torch.inference_mode():
+        dualcliploader = DualCLIPLoader()
+        clip_model = dualcliploader.load_clip(
+            clip_name1="t5xxl_fp8_e4m3fn.safetensors",
+            clip_name2="clip_l.safetensors",
+            type="flux",
+        )
+        unetloader = UNETLoader()
+        loaded_model = unetloader.load_unet(
+            unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+        )
+        vaeloader = VAELoader()
+        ae = vaeloader.load_vae(vae_name="ae.sft")
+        emptylatentimage = EmptyLatentImage()
+        cliptextencode = CLIPTextEncode()
+        ksampler = KSampler()
+        vaedecode = VAEDecode()
+        saveimage = SaveImage()
 
 
 @to_thread
