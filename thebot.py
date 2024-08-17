@@ -347,7 +347,7 @@ def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
         )
 
         basicguider_10 = basicguider.get_guider(
-            model=get_value_at_index(model, 0),
+            model=get_value_at_index(loaded_model, 0),
             conditioning=get_value_at_index(fluxguidance_12, 0),
         )
 
