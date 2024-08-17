@@ -279,8 +279,7 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
     return wrapper
 
 
-loaded_name = ""
-model = None
+loaded_name = "dev"
 with torch.inference_mode():
     dualcliploader = DualCLIPLoader()
     clip_model = dualcliploader.load_clip(
@@ -289,7 +288,7 @@ with torch.inference_mode():
         type="flux",
     )
     unetloader = UNETLoader()
-    model = unetloader.load_unet(
+    loaded_model = unetloader.load_unet(
         unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
     )
     vaeloader = VAELoader()
@@ -302,9 +301,25 @@ with torch.inference_mode():
 
 
 @to_thread
-def generate_image(prompt, width, height):
+def generate_image(
+    prompt,
+    model,
+    steps,
+    width,
+    height,
+):
     id = id_generator()
     with torch.inference_mode():
+        if loaded_name != model:
+            if model == "schnell":
+                loaded_model = unetloader.load_unet(
+                    unet_name="flux1-schnell-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+                )
+            else:
+                loaded_model = unetloader.load_unet(
+                    unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+                )
+            loaded_name = model
         emptylatentimage_2 = emptylatentimage.generate(
             width=width, height=height, batch_size=1
         )
@@ -318,12 +333,12 @@ def generate_image(prompt, width, height):
 
         ksampler_1 = ksampler.sample(
             seed=random.randint(1, 2**64),
-            steps=4,
+            steps=steps if steps else 20 if model == "dev" else 4,
             cfg=1,
             sampler_name="euler",
             scheduler="normal",
             denoise=1,
-            model=get_value_at_index(model, 0),
+            model=get_value_at_index(loaded_model, 0),
             positive=get_value_at_index(cliptextencode_3, 0),
             negative=get_value_at_index(cliptextencode_4, 0),
             latent_image=get_value_at_index(emptylatentimage_2, 0),
@@ -339,14 +354,16 @@ def generate_image(prompt, width, height):
 
 
 @bot.slash_command(description="Show system stats")
-async def goofy_ahh(
+async def flux(
     ctx,
     prompt=discord.Option(str),
-    width=discord.Option(int, default=384),
-    height=discord.Option(int, default=384),
+    model=discord.Option(str, default="dev", choices=["dev", "schnell"]),
+    steps=discord.Option(int, default=0),
+    width=discord.Option(int, default=os.environ["DEFAULT_SIZE"]),
+    height=discord.Option(int, default=os.environ["DEFAULT_SIZE"]),
 ):
     await ctx.response.defer()
-    pth = await generate_image(prompt, width, height)
+    pth = await generate_image(prompt, model, steps, width, height)
     await ctx.followup.send(
         file=discord.File(
             str(pth),
