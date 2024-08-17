@@ -353,7 +353,7 @@ def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
 
         basicscheduler_9 = basicscheduler.get_sigmas(
             scheduler="simple",
-            steps=steps,
+            steps=steps if steps else 20 if model == "dev" else 4,
             denoise=1,
             model=get_value_at_index(loaded_model, 0),
         )
