@@ -353,14 +353,20 @@ def generate_image(
         return os.path.join(comfyui_dir, f"output/{id}_00001_.png")
 
 
-@bot.slash_command(description="Show system stats")
+@bot.slash_command(description="Generate images using Flux")
 async def flux(
     ctx,
-    prompt=discord.Option(str),
-    model=discord.Option(str, default="dev", choices=["dev", "schnell"]),
-    steps=discord.Option(int, default=0),
-    width=discord.Option(int, default=os.environ["DEFAULT_SIZE"]),
-    height=discord.Option(int, default=os.environ["DEFAULT_SIZE"]),
+    prompt=discord.Option(str, description="Flux prompt"),
+    model=discord.Option(
+        str, default="dev", choices=["dev", "schnell"], description="Model to use"
+    ),
+    steps=discord.Option(int, default=0, description="Number of steps"),
+    width=discord.Option(
+        int, default=os.environ["DEFAULT_SIZE"], description="Image width"
+    ),
+    height=discord.Option(
+        int, default=os.environ["DEFAULT_SIZE"], description="Image height"
+    ),
 ):
     await ctx.response.defer()
     pth = await generate_image(prompt, model, steps, width, height)
