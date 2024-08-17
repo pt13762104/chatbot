@@ -301,13 +301,7 @@ with torch.inference_mode():
 
 
 @to_thread
-def generate_image(
-    prompt,
-    model,
-    steps,
-    width,
-    height,
-):
+def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
     id = id_generator()
     global loaded_name, loaded_model
     with torch.inference_mode():
@@ -321,35 +315,61 @@ def generate_image(
                     unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
                 )
             loaded_name = model
-        emptylatentimage_2 = emptylatentimage.generate(
-            width=width, height=height, batch_size=1
-        )
-        cliptextencode_3 = cliptextencode.encode(
+        cliptextencode_1 = cliptextencode.encode(
             text=prompt, clip=get_value_at_index(clip_model, 0)
         )
+        ksamplerselect = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
+        ksamplerselect_8 = ksamplerselect.get_sampler(sampler_name="euler")
 
-        cliptextencode_4 = cliptextencode.encode(
-            text="", clip=get_value_at_index(clip_model, 0)
+        randomnoise = NODE_CLASS_MAPPINGS["RandomNoise"]()
+        randomnoise_11 = randomnoise.get_noise(
+            noise_seed=seed if seed else random.randint(1, 2**64)
         )
 
-        ksampler_1 = ksampler.sample(
-            seed=random.randint(1, 2**64),
-            steps=steps if steps else 20 if model == "dev" else 4,
-            cfg=1,
-            sampler_name="euler",
-            scheduler="normal",
+        emptysd3latentimage = NODE_CLASS_MAPPINGS["EmptySD3LatentImage"]()
+        emptysd3latentimage_13 = emptysd3latentimage.generate(
+            width=width, height=height, batch_size=1
+        )
+
+        fluxguidance = NODE_CLASS_MAPPINGS["FluxGuidance"]()
+        basicguider = NODE_CLASS_MAPPINGS["BasicGuider"]()
+        basicscheduler = NODE_CLASS_MAPPINGS["BasicScheduler"]()
+        samplercustomadvanced = NODE_CLASS_MAPPINGS["SamplerCustomAdvanced"]()
+        vaedecode = VAEDecode()
+        saveimage = SaveImage()
+
+        fluxguidance_12 = fluxguidance.append(
+            guidance=1 if loaded_name == "schnell" else guidance_scale,
+            conditioning=get_value_at_index(cliptextencode_1, 0),
+        )
+
+        basicguider_10 = basicguider.get_guider(
+            model=get_value_at_index(model, 0),
+            conditioning=get_value_at_index(fluxguidance_12, 0),
+        )
+
+        basicscheduler_9 = basicscheduler.get_sigmas(
+            scheduler="simple",
+            steps=steps,
             denoise=1,
             model=get_value_at_index(loaded_model, 0),
-            positive=get_value_at_index(cliptextencode_3, 0),
-            negative=get_value_at_index(cliptextencode_4, 0),
-            latent_image=get_value_at_index(emptylatentimage_2, 0),
         )
-        vaedecode_5 = vaedecode.decode(
-            samples=get_value_at_index(ksampler_1, 0),
+
+        samplercustomadvanced_7 = samplercustomadvanced.sample(
+            noise=get_value_at_index(randomnoise_11, 0),
+            guider=get_value_at_index(basicguider_10, 0),
+            sampler=get_value_at_index(ksamplerselect_8, 0),
+            sigmas=get_value_at_index(basicscheduler_9, 0),
+            latent_image=get_value_at_index(emptysd3latentimage_13, 0),
+        )
+
+        vaedecode_2 = vaedecode.decode(
+            samples=get_value_at_index(samplercustomadvanced_7, 0),
             vae=get_value_at_index(ae, 0),
         )
+
         saveimage.save_images(
-            filename_prefix=id, images=get_value_at_index(vaedecode_5, 0)
+            filename_prefix=id, images=get_value_at_index(vaedecode_2, 0)
         )
         return os.path.join(comfyui_dir, f"output/{id}_00001_.png")
 
@@ -368,9 +388,13 @@ async def flux(
     height=discord.Option(
         int, default=int(os.environ["DEFAULT_SIZE"]), description="Image height"
     ),
+    seed=discord.Option(int, default=0, description="Noise seed"),
+    guidance_scale=discord.Option(float, default=3.5, description="Guidance scale"),
 ):
     await ctx.response.defer()
-    pth = await generate_image(prompt, model, steps, width, height)
+    pth = await generate_image(
+        prompt, model, steps, width, height, seed, guidance_scale
+    )
     await ctx.followup.send(
         file=discord.File(
             str(pth),
