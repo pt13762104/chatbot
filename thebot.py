@@ -10,9 +10,58 @@ import nvidia_smi
 import ollama
 import os
 import json
+import typing
+import functools
+import asyncio
+import string
 from dotenv import load_dotenv
+import os
+import random
+import sys
+from typing import Sequence, Mapping, Any, Union
+import torch
 
 load_dotenv()
+comfyui_dir = os.environ["COMFYUI_DIR"]
+sys.path.append(os.environ["COMFYUI_DIR"])
+from nodes import (
+    DualCLIPLoader,
+    CLIPTextEncode,
+    UNETLoader,
+    VAELoader,
+    VAEDecode,
+    SaveImage,
+    KSampler,
+    NODE_CLASS_MAPPINGS,
+    EmptyLatentImage,
+)
+
+client = ollama.AsyncClient()
+
+
+def get_value_at_index(obj: Union[Sequence, Mapping], index: int) -> Any:
+    """Returns the value at the given index of a sequence or mapping.
+
+    If the object is a sequence (like list or string), returns the value at the given index.
+    If the object is a mapping (like a dictionary), returns the value at the index-th key.
+
+    Some return a dictionary, in these cases, we look for the "results" key
+    Args:
+        obj (Union[Sequence, Mapping]): The object to retrieve the value from.
+        index (int): The index of the value to retrieve.
+
+    Returns:
+        Any: The value at the given index.
+
+    Raises:
+        IndexError: If the index is out of bounds for the object and the object is not a mapping.
+    """
+    try:
+        return obj[index]
+    except KeyError:
+        return obj["result"][index]
+
+
 intents = discord.Intents.all()
 bot = commands.Bot(intents=intents)
 nvidia_smi.nvmlInit()
@@ -25,6 +74,18 @@ def get_gpu(i):
     util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
     mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
     return [mem.used, mem.total, util.gpu]
+
+
+def to_thread(func: typing.Callable) -> typing.Coroutine:
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    return wrapper
+
+
+def id_generator(size=8, chars=string.ascii_letters + string.digits):
+    return "".join(random.choice(chars) for _ in range(size))
 
 
 @bot.slash_command(description="Chat with a LLM")
@@ -42,7 +103,7 @@ async def chat(
         }
     )
     await ctx.response.defer()
-    response = ollama.chat(model=model, messages=chat_hist[ctx.author.id])
+    response = await client.chat(model=model, messages=chat_hist[ctx.author.id])
     msg = response["message"]
     chat_hist[ctx.author.id].append(msg)
     tmp = msg["content"]
@@ -208,6 +269,91 @@ async def stats(ctx):
         inline=False,
     )
     await ctx.respond(embed=embed)
+
+
+def to_thread(func: typing.Callable) -> typing.Coroutine:
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    return wrapper
+
+
+loaded_name = ""
+model = None
+with torch.inference_mode():
+    dualcliploader = DualCLIPLoader()
+    clip_model = dualcliploader.load_clip(
+        clip_name1="t5xxl_fp8_e4m3fn.safetensors",
+        clip_name2="clip_l.safetensors",
+        type="flux",
+    )
+    unetloader = UNETLoader()
+    model = unetloader.load_unet(
+        unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+    )
+    vaeloader = VAELoader()
+    ae = vaeloader.load_vae(vae_name="ae.sft")
+    emptylatentimage = EmptyLatentImage()
+    cliptextencode = CLIPTextEncode()
+    ksampler = KSampler()
+    vaedecode = VAEDecode()
+    saveimage = SaveImage()
+
+
+@to_thread
+def generate_image(prompt, width, height):
+    id = id_generator()
+    with torch.inference_mode():
+        emptylatentimage_2 = emptylatentimage.generate(
+            width=width, height=height, batch_size=1
+        )
+        cliptextencode_3 = cliptextencode.encode(
+            text=prompt, clip=get_value_at_index(clip_model, 0)
+        )
+
+        cliptextencode_4 = cliptextencode.encode(
+            text="", clip=get_value_at_index(clip_model, 0)
+        )
+
+        ksampler_1 = ksampler.sample(
+            seed=random.randint(1, 2**64),
+            steps=4,
+            cfg=1,
+            sampler_name="euler",
+            scheduler="normal",
+            denoise=1,
+            model=get_value_at_index(model, 0),
+            positive=get_value_at_index(cliptextencode_3, 0),
+            negative=get_value_at_index(cliptextencode_4, 0),
+            latent_image=get_value_at_index(emptylatentimage_2, 0),
+        )
+        vaedecode_5 = vaedecode.decode(
+            samples=get_value_at_index(ksampler_1, 0),
+            vae=get_value_at_index(ae, 0),
+        )
+        saveimage.save_images(
+            filename_prefix=id, images=get_value_at_index(vaedecode_5, 0)
+        )
+        return os.path.join(comfyui_dir, f"output/{id}_00001_.png")
+
+
+@bot.slash_command(description="Show system stats")
+async def goofy_ahh(
+    ctx,
+    prompt=discord.Option(str),
+    width=discord.Option(int, default=384),
+    height=discord.Option(int, default=384),
+):
+    await ctx.response.defer()
+    pth = await generate_image(prompt, width, height)
+    await ctx.followup.send(
+        file=discord.File(
+            str(pth),
+            filename="image.png",
+        )
+    )
+    os.remove(pth)
 
 
 from os import listdir
