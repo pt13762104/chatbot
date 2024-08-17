@@ -35,6 +35,7 @@ from nodes import (
     NODE_CLASS_MAPPINGS,
     EmptyLatentImage,
 )
+from comfy_extras import *
 
 client = ollama.AsyncClient()
 
