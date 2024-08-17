@@ -1,41 +1,47 @@
 #!/usr/bin/python3
-import discord
-from discord.ext import commands
-import psutil
-import distro
-import shutil
-import cpuinfo
+import asyncio
+import functools
+import json
+import os
 import platform
+import random
+import shutil
+import string
+import sys
+import typing
+from typing import Any, Mapping, Sequence, Union
+
+import cpuinfo
+import discord
+import distro
 import nvidia_smi
 import ollama
-import os
-import json
-import typing
-import functools
-import asyncio
-import string
-from dotenv import load_dotenv
-import os
-import random
-import sys
-from typing import Sequence, Mapping, Any, Union
+import psutil
 import torch
+from discord.ext import commands
+from dotenv import load_dotenv
 
 load_dotenv()
 comfyui_dir = os.environ["COMFYUI_DIR"]
 sys.path.append(os.environ["COMFYUI_DIR"])
-from nodes import (
-    DualCLIPLoader,
-    CLIPTextEncode,
-    UNETLoader,
-    VAELoader,
-    VAEDecode,
-    SaveImage,
-    KSampler,
-    NODE_CLASS_MAPPINGS,
-    EmptyLatentImage,
+from comfy_extras.nodes_custom_sampler import (
+    BasicGuider,
+    BasicScheduler,
+    KSamplerSelect,
+    RandomNoise,
+    SamplerCustomAdvanced,
 )
-from comfy_extras import *
+from comfy_extras.nodes_flux import FluxGuidance
+from comfy_extras.nodes_sd3 import EmptySD3LatentImage
+from nodes import (
+    CLIPTextEncode,
+    DualCLIPLoader,
+    KSampler,
+    SaveImage,
+    UNETLoader,
+    VAEDecode,
+    VAELoader,
+)
 
 client = ollama.AsyncClient()
 
@@ -284,22 +290,28 @@ if int(os.environ["IMAGE_GEN"]):
     loaded_name = "dev"
     with torch.inference_mode():
         dualcliploader = DualCLIPLoader()
+        unetloader = UNETLoader()
+        vaeloader = VAELoader()
+        cliptextencode = CLIPTextEncode()
+        ksampler = KSampler()
+        vaedecode = VAEDecode()
+        saveimage = SaveImage()
+        emptysd3latentimage = EmptySD3LatentImage()
+        fluxguidance = FluxGuidance()
+        basicguider = BasicGuider()
+        basicscheduler = BasicScheduler()
+        samplercustomadvanced = SamplerCustomAdvanced()
+        ksamplerselect = KSamplerSelect()
+        randomnoise = RandomNoise()
+        loaded_model = unetloader.load_unet(
+            unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+        )
         clip_model = dualcliploader.load_clip(
             clip_name1="t5xxl_fp8_e4m3fn.safetensors",
             clip_name2="clip_l.safetensors",
             type="flux",
         )
-        unetloader = UNETLoader()
-        loaded_model = unetloader.load_unet(
-            unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
-        )
-        vaeloader = VAELoader()
         ae = vaeloader.load_vae(vae_name="ae.sft")
-        emptylatentimage = EmptyLatentImage()
-        cliptextencode = CLIPTextEncode()
-        ksampler = KSampler()
-        vaedecode = VAEDecode()
-        saveimage = SaveImage()
 
 
 @to_thread
@@ -320,25 +332,14 @@ def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
         cliptextencode_1 = cliptextencode.encode(
             text=prompt, clip=get_value_at_index(clip_model, 0)
         )
-        ksamplerselect = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
-        ksamplerselect_8 = ksamplerselect.get_sampler(sampler_name="euler")
 
-        randomnoise = NODE_CLASS_MAPPINGS["RandomNoise"]()
+        ksamplerselect_8 = ksamplerselect.get_sampler(sampler_name="euler")
         randomnoise_11 = randomnoise.get_noise(
             noise_seed=seed if seed else random.randint(1, 2**64)
         )
-
-        emptysd3latentimage = NODE_CLASS_MAPPINGS["EmptySD3LatentImage"]()
         emptysd3latentimage_13 = emptysd3latentimage.generate(
             width=width, height=height, batch_size=1
         )
-
-        fluxguidance = NODE_CLASS_MAPPINGS["FluxGuidance"]()
-        basicguider = NODE_CLASS_MAPPINGS["BasicGuider"]()
-        basicscheduler = NODE_CLASS_MAPPINGS["BasicScheduler"]()
-        samplercustomadvanced = NODE_CLASS_MAPPINGS["SamplerCustomAdvanced"]()
-        vaedecode = VAEDecode()
-        saveimage = SaveImage()
 
         fluxguidance_12 = fluxguidance.append(
             guidance=1 if loaded_name == "schnell" else guidance_scale,
