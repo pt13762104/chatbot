@@ -309,6 +309,7 @@ def generate_image(
     height,
 ):
     id = id_generator()
+    global loaded_name
     with torch.inference_mode():
         if loaded_name != model:
             if model == "schnell":
