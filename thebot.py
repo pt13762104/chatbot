@@ -362,10 +362,10 @@ async def flux(
     ),
     steps=discord.Option(int, default=0, description="Number of steps"),
     width=discord.Option(
-        int, default=os.environ["DEFAULT_SIZE"], description="Image width"
+        int, default=int(os.environ["DEFAULT_SIZE"]), description="Image width"
     ),
     height=discord.Option(
-        int, default=os.environ["DEFAULT_SIZE"], description="Image height"
+        int, default=int(os.environ["DEFAULT_SIZE"]), description="Image height"
     ),
 ):
     await ctx.response.defer()
