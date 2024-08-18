@@ -286,8 +286,11 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
     return wrapper
 
 
+load_dev = int(os.environ["LOAD_DEV"])
+load_schnell = int(os.environ["LOAD_SCHNELL"])
+flux_dev = None
+flux_schnell = None
 if int(os.environ["IMAGE_GEN"]):
-    loaded_name = "dev"
     with torch.inference_mode():
         dualcliploader = DualCLIPLoader()
         unetloader = UNETLoader()
@@ -303,9 +306,14 @@ if int(os.environ["IMAGE_GEN"]):
         samplercustomadvanced = SamplerCustomAdvanced()
         ksamplerselect = KSamplerSelect()
         randomnoise = RandomNoise()
-        loaded_model = unetloader.load_unet(
-            unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
-        )
+        if load_dev:
+            flux_dev = unetloader.load_unet(
+                unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+            )
+        if load_schnell:
+            flux_schnell = unetloader.load_unet(
+                unet_name="flux1-schnell-fp8.safetensors", weight_dtype="fp8_e4m3fn"
+            )
         clip_model = dualcliploader.load_clip(
             clip_name1="t5xxl_fp8_e4m3fn.safetensors",
             clip_name2="clip_l.safetensors",
@@ -317,18 +325,7 @@ if int(os.environ["IMAGE_GEN"]):
 @to_thread
 def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
     id = id_generator()
-    global loaded_name, loaded_model
     with torch.inference_mode():
-        if loaded_name != model:
-            if model == "schnell":
-                loaded_model = unetloader.load_unet(
-                    unet_name="flux1-schnell-fp8.safetensors", weight_dtype="fp8_e4m3fn"
-                )
-            else:
-                loaded_model = unetloader.load_unet(
-                    unet_name="flux1-dev-fp8.safetensors", weight_dtype="fp8_e4m3fn"
-                )
-            loaded_name = model
         cliptextencode_1 = cliptextencode.encode(
             text=prompt, clip=get_value_at_index(clip_model, 0)
         )
@@ -342,12 +339,12 @@ def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
         )
 
         fluxguidance_12 = fluxguidance.append(
-            guidance=1 if loaded_name == "schnell" else guidance_scale,
+            guidance=1 if model == "schnell" else guidance_scale,
             conditioning=get_value_at_index(cliptextencode_1, 0),
         )
 
         basicguider_10 = basicguider.get_guider(
-            model=get_value_at_index(loaded_model, 0),
+            model=get_value_at_index(flux_dev if model == "dev" else flux_schnell, 0),
             conditioning=get_value_at_index(fluxguidance_12, 0),
         )
 
@@ -355,7 +352,7 @@ def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
             scheduler="simple",
             steps=steps if steps else 20 if model == "dev" else 4,
             denoise=1,
-            model=get_value_at_index(loaded_model, 0),
+            model=get_value_at_index(flux_dev if model == "dev" else flux_schnell, 0),
         )
 
         samplercustomadvanced_7 = samplercustomadvanced.sample(
@@ -395,16 +392,20 @@ async def flux(
     guidance_scale=discord.Option(float, default=3.5, description="Guidance scale"),
 ):
     await ctx.response.defer()
-    pth = await generate_image(
-        prompt, model, steps, width, height, seed, guidance_scale
-    )
-    await ctx.followup.send(
-        file=discord.File(
-            str(pth),
-            filename="image.png",
+    if (model == "dev" and load_dev == 0) or (model == "schnell" and load_schnell == 0):
+        embed = discord.Embed(title="Model unavailable!", color=0x007FFF)
+        await ctx.followup.send(embed=embed)
+    else:
+        pth = await generate_image(
+            prompt, model, steps, width, height, seed, guidance_scale
         )
-    )
-    os.remove(pth)
+        await ctx.followup.send(
+            file=discord.File(
+                str(pth),
+                filename="image.png",
+            )
+        )
+        os.remove(pth)
 
 
 from os import listdir
