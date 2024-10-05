@@ -274,7 +274,7 @@ async def stop(
 ):
     cur_running = [i["name"] for i in ollama.ps()["models"]]
     if model not in cur_running:
-        embed = discord.Embed(title=f"Model {model} was not started", color=0x007FFF)
+        embed = discord.Embed(title=f"Model {model} was not started!", color=0xFF7F00)
         await ctx.respond(embed=embed)
     else:
         await ctx.response.defer()
@@ -358,6 +358,7 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
     return wrapper
 
 
+do_image = int(os.environ["IMAGE_GEN"])
 load_dev = int(os.environ["LOAD_DEV"])
 load_schnell = int(os.environ["LOAD_SCHNELL"])
 flux_dev = None
@@ -464,8 +465,12 @@ async def flux(
     guidance_scale=discord.Option(float, default=3.5, description="Guidance scale"),
 ):
     await ctx.response.defer()
-    if (model == "dev" and load_dev == 0) or (model == "schnell" and load_schnell == 0):
-        embed = discord.Embed(title="Model unavailable!", color=0x007FFF)
+    if (
+        (not do_image)
+        or (model == "dev" and load_dev == 0)
+        or (model == "schnell" and load_schnell == 0)
+    ):
+        embed = discord.Embed(title="Model unavailable!", color=0xFF7F00)
         await ctx.followup.send(embed=embed)
     else:
         pth = await generate_image(
@@ -490,5 +495,4 @@ for f in listdir("history"):
             chat_hist[int(f.replace(".json", ""))] = json.load(ff)
         except json.decoder.JSONDecodeError:
             pass
-print(ollama.ps())
 bot.run(os.getenv("TOKEN"))
