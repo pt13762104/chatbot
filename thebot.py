@@ -20,6 +20,7 @@ import psutil
 import torch
 from discord.ext import commands
 from dotenv import load_dotenv
+import humanfriendly
 
 load_dotenv()
 comfyui_dir = os.environ["COMFYUI_DIR"]
@@ -95,11 +96,16 @@ def id_generator(size=8, chars=string.ascii_letters + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
 
+model_choices = [i["name"] for i in ollama.list()["models"]]
+
+
 @bot.slash_command(description="Chat with a LLM")
 async def chat(
     ctx,
     message=discord.Option(str, "Message to send"),
-    model=discord.Option(str, "Model to use", default=os.environ["DEFAULT_MODEL"]),
+    model=discord.Option(
+        str, "Model to use", default=os.environ["DEFAULT_MODEL"], choices=model_choices
+    ),
 ):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
@@ -117,7 +123,7 @@ async def chat(
     ff = open(f"history/{ctx.author.id}.json", "w")
     ff.write(json.dumps(chat_hist[ctx.author.id]))
     if len(tmp) <= 4000:
-        embed = discord.Embed(title="Response:", color=0x007FFF, description=tmp)
+        embed = discord.Embed(title=f"Model: {model}", color=0x007FFF, description=tmp)
         embed.add_field(
             name="Prompt token count:",
             value=(
@@ -194,7 +200,7 @@ async def system(ctx, system=discord.Option(str, "System prompt", default="")):
     await ctx.respond(embed=embed)
 
 
-@bot.slash_command(description="Show Ollama models")
+@bot.slash_command(description="Show running Ollama models")
 async def ps(ctx):
     embed = discord.Embed(title="Ollama ps", color=0x007FFF)
     models = ollama.ps()["models"]
@@ -209,6 +215,72 @@ async def ps(ctx):
             inline=False,
         )
     await ctx.respond(embed=embed)
+
+
+@bot.slash_command(description="Show Ollama models")
+async def list(
+    ctx,
+    sorting=discord.Option(
+        str,
+        "What property to sort by",
+        default="Parameter size",
+        choices=[
+            "Size",
+            "Parameter size",
+            "Model name",
+            "Quantization",
+            "Modified time",
+        ],
+    ),
+):
+    embed = discord.Embed(title="Model listing", color=0x007FFF)
+    models = ollama.list()["models"]
+    if sorting == "Parameter size":
+        models.sort(
+            key=lambda x: humanfriendly.parse_size(x["details"]["parameter_size"])
+        )
+    elif sorting == "Size":
+        models.sort(key=lambda x: x["size"])
+    elif sorting == "Model name":
+        models.sort(key=lambda x: x["name"])
+    elif sorting == "Quantization":
+        models.sort(key=lambda x: x["details"]["quantization_level"])
+    else:
+        models.sort(key=lambda x: x["modified_at"], reverse=True)
+    for i in range(len(models)):
+        embed.add_field(name=f"Model {i+1} name: ", value=models[i]["name"])
+        embed.add_field(
+            name=f"Model {i+1} parameter size: ",
+            value=f"{models[i]['details']['parameter_size']}",
+        )
+        embed.add_field(
+            name=f"Model {i+1} quantization: ",
+            value=f"{models[i]['details']['quantization_level']}",
+        )
+        embed.add_field(
+            name=f"Model {i+1} size: ",
+            value=f"{models[i]['size']/1e9:.1f} GB",
+            inline=False,
+        )
+    await ctx.respond(embed=embed)
+
+
+@bot.slash_command(description="Stop a model")
+async def stop(
+    ctx,
+    model=discord.Option(
+        str, "Model to stop", default=os.environ["DEFAULT_MODEL"], choices=model_choices
+    ),
+):
+    cur_running = [i["name"] for i in ollama.ps()["models"]]
+    if model not in cur_running:
+        embed = discord.Embed(title=f"Model {model} was not started", color=0x007FFF)
+        await ctx.respond(embed=embed)
+    else:
+        await ctx.response.defer()
+        await client.chat(model=model, keep_alive=0)
+        embed = discord.Embed(title=f"Model {model} stopped", color=0x007FFF)
+        await ctx.followup.send(embed=embed)
 
 
 @bot.slash_command(description="Show system stats")

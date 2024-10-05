@@ -5,3 +5,4 @@ distro
 py-cpuinfo
 nvidia-ml-py3
 python-dotenv
+humanfriendly
