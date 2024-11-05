@@ -17,33 +17,11 @@ import distro
 import nvidia_smi
 import ollama
 import psutil
-import torch
 from discord.ext import commands
 from dotenv import load_dotenv
 import humanfriendly
 
 load_dotenv()
-comfyui_dir = os.environ["COMFYUI_DIR"]
-sys.path.append(os.environ["COMFYUI_DIR"])
-from comfy_extras.nodes_custom_sampler import (
-    BasicGuider,
-    BasicScheduler,
-    KSamplerSelect,
-    RandomNoise,
-    SamplerCustomAdvanced,
-)
-from comfy_extras.nodes_flux import FluxGuidance
-from comfy_extras.nodes_sd3 import EmptySD3LatentImage
-from nodes import (
-    CLIPTextEncode,
-    DualCLIPLoader,
-    KSampler,
-    SaveImage,
-    UNETLoader,
-    VAEDecode,
-    VAELoader,
-)
-
 client = ollama.AsyncClient()
 
 
@@ -364,6 +342,29 @@ load_schnell = int(os.environ["LOAD_SCHNELL"])
 flux_dev = None
 flux_schnell = None
 if int(os.environ["IMAGE_GEN"]):
+    import torch
+
+    comfyui_dir = os.environ["COMFYUI_DIR"]
+    sys.path.append(os.environ["COMFYUI_DIR"])
+    from comfy_extras.nodes_custom_sampler import (
+        BasicGuider,
+        BasicScheduler,
+        KSamplerSelect,
+        RandomNoise,
+        SamplerCustomAdvanced,
+    )
+    from comfy_extras.nodes_flux import FluxGuidance
+    from comfy_extras.nodes_sd3 import EmptySD3LatentImage
+    from nodes import (
+        CLIPTextEncode,
+        DualCLIPLoader,
+        KSampler,
+        SaveImage,
+        UNETLoader,
+        VAEDecode,
+        VAELoader,
+    )
+
     with torch.inference_mode():
         dualcliploader = DualCLIPLoader()
         unetloader = UNETLoader()
@@ -394,95 +395,97 @@ if int(os.environ["IMAGE_GEN"]):
         )
         ae = vaeloader.load_vae(vae_name="ae.sft")
 
-
-@to_thread
-def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
-    id = id_generator()
-    with torch.inference_mode():
-        cliptextencode_1 = cliptextencode.encode(
-            text=prompt, clip=get_value_at_index(clip_model, 0)
-        )
-
-        ksamplerselect_8 = ksamplerselect.get_sampler(sampler_name="euler")
-        randomnoise_11 = randomnoise.get_noise(
-            noise_seed=seed if seed else random.randint(1, 2**64)
-        )
-        emptysd3latentimage_13 = emptysd3latentimage.generate(
-            width=width, height=height, batch_size=1
-        )
-
-        fluxguidance_12 = fluxguidance.append(
-            guidance=1 if model == "schnell" else guidance_scale,
-            conditioning=get_value_at_index(cliptextencode_1, 0),
-        )
-
-        basicguider_10 = basicguider.get_guider(
-            model=get_value_at_index(flux_dev if model == "dev" else flux_schnell, 0),
-            conditioning=get_value_at_index(fluxguidance_12, 0),
-        )
-
-        basicscheduler_9 = basicscheduler.get_sigmas(
-            scheduler="simple",
-            steps=steps if steps else 20 if model == "dev" else 4,
-            denoise=1,
-            model=get_value_at_index(flux_dev if model == "dev" else flux_schnell, 0),
-        )
-
-        samplercustomadvanced_7 = samplercustomadvanced.sample(
-            noise=get_value_at_index(randomnoise_11, 0),
-            guider=get_value_at_index(basicguider_10, 0),
-            sampler=get_value_at_index(ksamplerselect_8, 0),
-            sigmas=get_value_at_index(basicscheduler_9, 0),
-            latent_image=get_value_at_index(emptysd3latentimage_13, 0),
-        )
-
-        vaedecode_2 = vaedecode.decode(
-            samples=get_value_at_index(samplercustomadvanced_7, 0),
-            vae=get_value_at_index(ae, 0),
-        )
-
-        saveimage.save_images(
-            filename_prefix=id, images=get_value_at_index(vaedecode_2, 0)
-        )
-        return os.path.join(comfyui_dir, f"output/{id}_00001_.png")
-
-
-@bot.slash_command(description="Generate images using Flux")
-async def flux(
-    ctx,
-    prompt=discord.Option(str, description="Flux prompt"),
-    model=discord.Option(
-        str, default="dev", choices=["dev", "schnell"], description="Model to use"
-    ),
-    steps=discord.Option(int, default=0, description="Number of steps"),
-    width=discord.Option(
-        int, default=int(os.environ["DEFAULT_SIZE"]), description="Image width"
-    ),
-    height=discord.Option(
-        int, default=int(os.environ["DEFAULT_SIZE"]), description="Image height"
-    ),
-    seed=discord.Option(int, default=0, description="Noise seed"),
-    guidance_scale=discord.Option(float, default=3.5, description="Guidance scale"),
-):
-    await ctx.response.defer()
-    if (
-        (not do_image)
-        or (model == "dev" and load_dev == 0)
-        or (model == "schnell" and load_schnell == 0)
-    ):
-        embed = discord.Embed(title="Model unavailable!", color=0xFF7F00)
-        await ctx.followup.send(embed=embed)
-    else:
-        pth = await generate_image(
-            prompt, model, steps, width, height, seed, guidance_scale
-        )
-        await ctx.followup.send(
-            file=discord.File(
-                str(pth),
-                filename="image.png",
+    @to_thread
+    def generate_image(prompt, model, steps, width, height, seed, guidance_scale):
+        id = id_generator()
+        with torch.inference_mode():
+            cliptextencode_1 = cliptextencode.encode(
+                text=prompt, clip=get_value_at_index(clip_model, 0)
             )
-        )
-        os.remove(pth)
+
+            ksamplerselect_8 = ksamplerselect.get_sampler(sampler_name="euler")
+            randomnoise_11 = randomnoise.get_noise(
+                noise_seed=seed if seed else random.randint(1, 2**64)
+            )
+            emptysd3latentimage_13 = emptysd3latentimage.generate(
+                width=width, height=height, batch_size=1
+            )
+
+            fluxguidance_12 = fluxguidance.append(
+                guidance=1 if model == "schnell" else guidance_scale,
+                conditioning=get_value_at_index(cliptextencode_1, 0),
+            )
+
+            basicguider_10 = basicguider.get_guider(
+                model=get_value_at_index(
+                    flux_dev if model == "dev" else flux_schnell, 0
+                ),
+                conditioning=get_value_at_index(fluxguidance_12, 0),
+            )
+
+            basicscheduler_9 = basicscheduler.get_sigmas(
+                scheduler="simple",
+                steps=steps if steps else 20 if model == "dev" else 4,
+                denoise=1,
+                model=get_value_at_index(
+                    flux_dev if model == "dev" else flux_schnell, 0
+                ),
+            )
+
+            samplercustomadvanced_7 = samplercustomadvanced.sample(
+                noise=get_value_at_index(randomnoise_11, 0),
+                guider=get_value_at_index(basicguider_10, 0),
+                sampler=get_value_at_index(ksamplerselect_8, 0),
+                sigmas=get_value_at_index(basicscheduler_9, 0),
+                latent_image=get_value_at_index(emptysd3latentimage_13, 0),
+            )
+
+            vaedecode_2 = vaedecode.decode(
+                samples=get_value_at_index(samplercustomadvanced_7, 0),
+                vae=get_value_at_index(ae, 0),
+            )
+
+            saveimage.save_images(
+                filename_prefix=id, images=get_value_at_index(vaedecode_2, 0)
+            )
+            return os.path.join(comfyui_dir, f"output/{id}_00001_.png")
+
+    @bot.slash_command(description="Generate images using Flux")
+    async def flux(
+        ctx,
+        prompt=discord.Option(str, description="Flux prompt"),
+        model=discord.Option(
+            str, default="dev", choices=["dev", "schnell"], description="Model to use"
+        ),
+        steps=discord.Option(int, default=0, description="Number of steps"),
+        width=discord.Option(
+            int, default=int(os.environ["DEFAULT_SIZE"]), description="Image width"
+        ),
+        height=discord.Option(
+            int, default=int(os.environ["DEFAULT_SIZE"]), description="Image height"
+        ),
+        seed=discord.Option(int, default=0, description="Noise seed"),
+        guidance_scale=discord.Option(float, default=3.5, description="Guidance scale"),
+    ):
+        await ctx.response.defer()
+        if (
+            (not do_image)
+            or (model == "dev" and load_dev == 0)
+            or (model == "schnell" and load_schnell == 0)
+        ):
+            embed = discord.Embed(title="Model unavailable!", color=0xFF7F00)
+            await ctx.followup.send(embed=embed)
+        else:
+            pth = await generate_image(
+                prompt, model, steps, width, height, seed, guidance_scale
+            )
+            await ctx.followup.send(
+                file=discord.File(
+                    str(pth),
+                    filename="image.png",
+                )
+            )
+            os.remove(pth)
 
 
 from os import listdir
