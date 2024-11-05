@@ -93,11 +93,21 @@ async def chat(
             "content": message,
         }
     )
-    await ctx.response.defer()
-    response = await client.chat(model=model, messages=chat_hist[ctx.author.id])
-    msg = response["message"]
-    chat_hist[ctx.author.id].append(msg)
-    tmp = msg["content"]
+    embed = discord.Embed(title=f"Model: {model}", color=0x007FFF)
+    send_msg = await ctx.send(embed=embed)
+    stream = await client.chat(
+        model=model, messages=chat_hist[ctx.author.id], stream=True
+    )
+    tmp = ""
+    stats = {}
+    async for chunk in stream:
+        if bool(chunk["done"]):
+            stats = chunk
+        tmp += chunk["message"]["content"]
+        embed = discord.Embed(title=f"Model: {model}", color=0x007FFF, description=tmp)
+        if len(tmp) <= 4000:
+            await send_msg.edit(embed=embed)
+    chat_hist[ctx.author.id].append({"role": "assistant", "content": tmp})
     ff = open(f"history/{ctx.author.id}.json", "w")
     ff.write(json.dumps(chat_hist[ctx.author.id]))
     if len(tmp) <= 4000:
@@ -105,37 +115,35 @@ async def chat(
         embed.add_field(
             name="Prompt token count:",
             value=(
-                f"{response['prompt_eval_count']} token" + "s"
-                if response["prompt_eval_count"] > 1
+                f"{stats['prompt_eval_count']} token" + "s"
+                if stats["prompt_eval_count"] > 1
                 else ""
             ),
             inline=False,
         )
         embed.add_field(
             name="Prompt processing speed:",
-            value=f"{response['prompt_eval_count']/response['prompt_eval_duration']*1e9:.1f} t/s",
+            value=f"{stats['prompt_eval_count']/stats['prompt_eval_duration']*1e9:.1f} t/s",
             inline=False,
         )
         embed.add_field(
             name="Generated token count:",
             value=(
-                f"{response['eval_count']} token" + "s"
-                if response["eval_count"] > 1
-                else ""
+                f"{stats['eval_count']} token" + "s" if stats["eval_count"] > 1 else ""
             ),
             inline=False,
         )
         embed.add_field(
             name="Generation speed:",
-            value=f"{response['eval_count']/response['eval_duration']*1e9:.1f} t/s",
+            value=f"{stats['eval_count']/stats['eval_duration']*1e9:.1f} t/s",
             inline=False,
         )
-        await ctx.followup.send(embed=embed)
+        await send_msg.edit(embed=embed)
     else:
         f = open("message.txt", "w")
         f.write(tmp)
         f.close()
-        await ctx.followup.send(file=discord.File("message.txt"))
+        await send_msg.edit(file=discord.File("message.txt"))
 
 
 @bot.slash_command(description="Clear the chat history")
