@@ -100,13 +100,18 @@ async def chat(
     )
     tmp = ""
     stats = {}
+    nchunks = 0
     async for chunk in stream:
         if bool(chunk["done"]):
             stats = chunk
         tmp += chunk["message"]["content"]
-        embed = discord.Embed(title=f"Model: {model}", color=0x007FFF, description=tmp)
-        if len(tmp) <= 4000:
-            await send_msg.edit(embed=embed)
+        if nchunks % 10 == 0 and nchunks:
+            embed = discord.Embed(
+                title=f"Model: {model}", color=0x007FFF, description=tmp
+            )
+            if len(tmp) <= 4000:
+                await send_msg.edit(embed=embed)
+        nchunks += 1
     chat_hist[ctx.author.id].append({"role": "assistant", "content": tmp})
     ff = open(f"history/{ctx.author.id}.json", "w")
     ff.write(json.dumps(chat_hist[ctx.author.id]))
