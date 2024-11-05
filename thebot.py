@@ -94,7 +94,7 @@ async def chat(
         }
     )
     embed = discord.Embed(title=f"Model: {model}", color=0x007FFF)
-    send_msg = await ctx.send(embed=embed)
+    send_msg = await ctx.respond(embed=embed)
     stream = await client.chat(
         model=model, messages=chat_hist[ctx.author.id], stream=True
     )
