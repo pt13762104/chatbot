@@ -10,7 +10,8 @@ import string
 import sys
 import typing
 from typing import Any, Mapping, Sequence, Union
-
+import base64
+import io
 import cpuinfo
 import discord
 import distro
@@ -84,15 +85,27 @@ async def chat(
     model=discord.Option(
         str, "Model to use", default=os.environ["DEFAULT_MODEL"], choices=model_choices
     ),
+    image: discord.Attachment = None,
 ):
     if ctx.author.id not in chat_hist:
         chat_hist.update({ctx.author.id: []})
-    chat_hist[ctx.author.id].append(
-        {
-            "role": "user",
-            "content": message,
-        }
-    )
+    if image:
+        fp = io.BytesIO()
+        await image.save(fp)
+        chat_hist[ctx.author.id].append(
+            {
+                "role": "user",
+                "content": message,
+                "images": [base64.b64encode(fp.getvalue()).decode("utf-8")],
+            }
+        )
+    else:
+        chat_hist[ctx.author.id].append(
+            {
+                "role": "user",
+                "content": message,
+            }
+        )
     embed = discord.Embed(title=f"Model: {model}", color=0x007FFF)
     send_msg = await ctx.respond(embed=embed)
     stream = await client.chat(
