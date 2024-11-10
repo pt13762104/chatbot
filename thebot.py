@@ -108,60 +108,69 @@ async def chat(
         )
     embed = discord.Embed(title=f"Model: {model}", color=0x007FFF)
     send_msg = await ctx.respond(embed=embed)
-    stream = await client.chat(
-        model=model, messages=chat_hist[ctx.author.id], stream=True
-    )
-    tmp = ""
-    stats = {}
-    nchunks = 0
-    async for chunk in stream:
-        if bool(chunk["done"]):
-            stats = chunk
-        tmp += chunk["message"]["content"]
-        if nchunks % 10 == 0 and nchunks:
+    try:
+        stream = await client.chat(
+            model=model, messages=chat_hist[ctx.author.id], stream=True
+        )
+        tmp = ""
+        stats = {}
+        nchunks = 0
+        async for chunk in stream:
+            if bool(chunk["done"]):
+                stats = chunk
+            tmp += chunk["message"]["content"]
+            if nchunks % 10 == 0 and nchunks:
+                embed = discord.Embed(
+                    title=f"Model: {model}", color=0x007FFF, description=tmp
+                )
+                if len(tmp) <= 4000:
+                    await send_msg.edit(embed=embed)
+            nchunks += 1
+        chat_hist[ctx.author.id].append({"role": "assistant", "content": tmp})
+        ff = open(f"history/{ctx.author.id}.json", "w")
+        ff.write(json.dumps(chat_hist[ctx.author.id]))
+        if len(tmp) <= 4000:
             embed = discord.Embed(
                 title=f"Model: {model}", color=0x007FFF, description=tmp
             )
-            if len(tmp) <= 4000:
-                await send_msg.edit(embed=embed)
-        nchunks += 1
-    chat_hist[ctx.author.id].append({"role": "assistant", "content": tmp})
-    ff = open(f"history/{ctx.author.id}.json", "w")
-    ff.write(json.dumps(chat_hist[ctx.author.id]))
-    if len(tmp) <= 4000:
-        embed = discord.Embed(title=f"Model: {model}", color=0x007FFF, description=tmp)
-        embed.add_field(
-            name="Prompt token count:",
-            value=(
-                f"{stats['prompt_eval_count']} token" + "s"
-                if stats["prompt_eval_count"] > 1
-                else ""
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Prompt processing speed:",
-            value=f"{stats['prompt_eval_count']/stats['prompt_eval_duration']*1e9:.1f} t/s",
-            inline=False,
-        )
-        embed.add_field(
-            name="Generated token count:",
-            value=(
-                f"{stats['eval_count']} token" + "s" if stats["eval_count"] > 1 else ""
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Generation speed:",
-            value=f"{stats['eval_count']/stats['eval_duration']*1e9:.1f} t/s",
-            inline=False,
-        )
+            embed.add_field(
+                name="Prompt token count:",
+                value=(
+                    f"{stats['prompt_eval_count']} token" + "s"
+                    if stats["prompt_eval_count"] > 1
+                    else ""
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Prompt processing speed:",
+                value=f"{stats['prompt_eval_count']/stats['prompt_eval_duration']*1e9:.1f} t/s",
+                inline=False,
+            )
+            embed.add_field(
+                name="Generated token count:",
+                value=(
+                    f"{stats['eval_count']} token" + "s"
+                    if stats["eval_count"] > 1
+                    else ""
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Generation speed:",
+                value=f"{stats['eval_count']/stats['eval_duration']*1e9:.1f} t/s",
+                inline=False,
+            )
+            await send_msg.edit(embed=embed)
+        else:
+            f = open("message.txt", "w")
+            f.write(tmp)
+            f.close()
+            await send_msg.edit(file=discord.File("message.txt"))
+    except ollama._types.ResponseError:
+        embed = discord.Embed(title=f"Unknown image format!", color=0xFF7F00)
         await send_msg.edit(embed=embed)
-    else:
-        f = open("message.txt", "w")
-        f.write(tmp)
-        f.close()
-        await send_msg.edit(file=discord.File("message.txt"))
+        del chat_hist[ctx.author.id][-1]
 
 
 @bot.slash_command(description="Clear the chat history")
